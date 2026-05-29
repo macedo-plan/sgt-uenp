@@ -923,40 +923,43 @@ function addEventMarkersToMap(){
 }
 
 async function geocodeLocation(locationStr){
-  // Limpar o texto: remover siglas de estado, traços, vírgulas extras
-  const clean = locationStr
-    .replace(/[-–]\s*[A-Z]{2}\b/g,'')  // Remove " - SC", " - PR" etc
-    .replace(/,\s*[A-Z]{2}\b/g,'')      // Remove ", SC", ", PR" etc
-    .trim();
+  // Limpar texto: remover siglas de estado
+  const stateMatch = locationStr.match(/[-,]\s*([A-Z]{2})\s*$/);
+  const stateCode = stateMatch ? stateMatch[1] : null;
+  const clean = locationStr.replace(/[-–,]\s*[A-Z]{2}\s*$/,'').trim();
 
-  // Lista de tentativas
-  const attempts = [
-    `${clean}, Paraná, Brasil`,
-    `${clean}, Brasil`,
-    clean,
-    locationStr + ', Brasil', // Tentativa com texto original
-  ];
+  // Mapa de estados brasileiros para filtrar resultados
+  const stateNames = {
+    'AC':'Acre','AL':'Alagoas','AP':'Amapá','AM':'Amazonas','BA':'Bahia',
+    'CE':'Ceará','DF':'Distrito Federal','ES':'Espírito Santo','GO':'Goiás',
+    'MA':'Maranhão','MT':'Mato Grosso','MS':'Mato Grosso do Sul','MG':'Minas Gerais',
+    'PA':'Pará','PB':'Paraíba','PR':'Paraná','PE':'Pernambuco','PI':'Piauí',
+    'RJ':'Rio de Janeiro','RN':'Rio Grande do Norte','RS':'Rio Grande do Sul',
+    'RO':'Rondônia','RR':'Roraima','SC':'Santa Catarina','SP':'São Paulo',
+    'SE':'Sergipe','TO':'Tocantins'
+  };
+  const stateName = stateCode ? stateNames[stateCode] : null;
 
-  for(const query of attempts){
-    try{
-      const r=await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&countrycodes=br`,
-        {headers:{'Accept-Language':'pt-BR','User-Agent':'SGT-UENP/1.0'}}
-      );
-      const data=await r.json();
-      if(data&&data.length>0){
-        // Preferir resultados no Paraná, senão pegar o primeiro válido no Brasil
-        const pr=data.find(d=>d.display_name&&d.display_name.toLowerCase().includes('paraná'));
-        const best=pr||data[0];
-        const lat=parseFloat(best.lat),lng=parseFloat(best.lon);
-        // Validar que está no Brasil
-        if(lat>=-35&&lat<=5&&lng>=-75&&lng<=-30){
-          return {lat,lng,display:best.display_name};
-        }
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(clean)}&count=10&language=pt&format=json`;
+    const r = await fetch(url);
+    const data = await r.json();
+
+    if(data && data.results && data.results.length > 0){
+      // Filtrar apenas resultados do Brasil
+      let results = data.results.filter(d => d.country_code === 'BR');
+
+      // Se informou estado, filtrar por ele
+      if(stateName){
+        const byState = results.filter(d => d.admin1 && d.admin1.toLowerCase().includes(stateName.toLowerCase()));
+        if(byState.length > 0) results = byState;
       }
-    }catch(e){console.warn('Geocode failed:',query,e);}
-    await new Promise(res=>setTimeout(res,300));
-  }
+
+      if(results.length > 0){
+        return {lat: results[0].latitude, lng: results[0].longitude, display: `${results[0].name}, ${results[0].admin1||''}`};
+      }
+    }
+  } catch(e){ console.warn('Geocode error:', e); }
   return null;
 }
 
