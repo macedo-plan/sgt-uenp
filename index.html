@@ -923,17 +923,34 @@ function addEventMarkersToMap(){
 }
 
 async function geocodeLocation(locationStr){
-  try{
-    const query=encodeURIComponent(locationStr+', Paraná, Brasil');
-    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,{
-      headers:{'Accept-Language':'pt-BR'}
-    });
-    const data=await r.json();
-    if(data&&data.length>0){
-      return {lat:parseFloat(data[0].lat),lng:parseFloat(data[0].lon),display:data[0].display_name};
-    }
-    return null;
-  }catch(e){return null;}
+  // Lista de tentativas progressivamente mais específicas
+  const attempts = [
+    `${locationStr}, Paraná, Brasil`,
+    `${locationStr}, PR, Brasil`,
+    `${locationStr}, Brasil`,
+  ];
+  for(const query of attempts){
+    try{
+      const r=await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&countrycodes=br`,
+        {headers:{'Accept-Language':'pt-BR','User-Agent':'SGT-UENP/1.0'}}
+      );
+      const data=await r.json();
+      if(data&&data.length>0){
+        // Preferir resultados no Paraná
+        const pr = data.find(d=>d.display_name&&d.display_name.toLowerCase().includes('paraná'));
+        const best = pr || data[0];
+        const lat=parseFloat(best.lat), lng=parseFloat(best.lon);
+        // Validar que está aproximadamente no Brasil (-35 a 5 lat, -75 a -30 lng)
+        if(lat>=-35&&lat<=5&&lng>=-75&&lng<=-30){
+          return {lat,lng,display:best.display_name};
+        }
+      }
+    }catch(e){console.warn('Geocode attempt failed:',query,e);}
+    // Pequena pausa entre tentativas (respeitar rate limit do Nominatim)
+    await new Promise(res=>setTimeout(res,500));
+  }
+  return null;
 }
 
 // ============================
@@ -1108,19 +1125,38 @@ function taskCardHtml(t){
 
 function eventRowHtml(e,todayStr){
   const isT=e.date===todayStr,isPast=e.date<todayStr;
+  const hasCoords=e.lat&&e.lng;
+  const mapBtn=hasCoords
+    ?`<span style="font-size:10px;color:#2E7D52;">📍</span>`
+    :`<button class="btn-icon" onclick="regeocode('${e.id}')" title="Localizar no mapa" style="color:#B45309;font-size:12px;">📍?</button>`;
   return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:${isPast?'#F9F9F7':'var(--bg)'};border:1px solid var(--border);margin-bottom:6px;opacity:${isPast?0.6:1};">
     <div style="font-size:18px;flex-shrink:0;">${isT?'📍':isPast?'📎':'📌'}</div>
     <div style="flex:1;min-width:0;">
       <div style="font-size:13px;font-weight:600;${isPast?'text-decoration:line-through;color:var(--muted)':''}">${e.title}</div>
       <div style="font-size:11px;color:var(--muted);margin-top:2px;">
-        ${isT?'<b style="color:#B91C1C">HOJE</b>':formatDate(e.date)} · ${e.time}${e.duration?' · '+e.duration+'h':''}${e.responsible?' · 👤 '+e.responsible:''}${e.notes?' · '+e.notes:''}
+        ${isT?'<b style="color:#B91C1C">HOJE</b>':formatDate(e.date)} · ${e.time}${e.duration?' · '+e.duration+'h':''}${e.location?' · 📍'+e.location:''}${e.responsible?' · 👤 '+e.responsible:''}${e.notes?' · '+e.notes:''}
       </div>
     </div>
     <div style="display:flex;gap:4px;flex-shrink:0;">
+      ${mapBtn}
       <button class="btn-icon" onclick="editEvent('${e.id}')" title="Editar">✏️</button>
       <button class="btn-icon" onclick="deleteEvent('${e.id}')" title="Excluir" style="color:#B91C1C;">🗑</button>
     </div>
   </div>`;
+}
+
+async function regeocode(id){
+  const e=events.find(e=>e.id===id);if(!e||!e.location)return;
+  toast('🔍 Localizando '+e.location+'...');
+  const geo=await geocodeLocation(e.location);
+  if(geo){
+    e.lat=geo.lat;e.lng=geo.lng;
+    if(db){const{id:eid,...data}=e;fsSet('events',eid,data);}else{save();}
+    addEventMarkersToMap();
+    toast('📍 '+e.location+' adicionado ao mapa!');
+  } else {
+    toast('⚠️ Cidade não encontrada. Tente um nome diferente.');
+  }
 }
 
 function setTaskStatus(id,status){
@@ -1449,11 +1485,14 @@ async function saveEvent(){
       notes:document.getElementById('ev-notes').value.trim()};
     if(db){const{id,...data}=e;fsSet('events',id,data);}else{events.push(e);save();renderPage(currentPage);}
     closeModal('event-modal');
-    if(geo){toast('📍 Compromisso adicionado ao mapa!');}
-    else{toast('⚠️ Cidade não encontrada no mapa, mas compromisso foi salvo.');}
     addNotification('event',title,e.frente,responsibleName);
     addEventMarkersToMap();
-    setTimeout(()=>openPostSaveModal('event',e,participants),300);
+    // Mostrar resultado da geocodificação e depois o modal de ações
+    setTimeout(()=>{
+      if(geo){toast('📍 '+location+' localizado no mapa!');}
+      else{toast('⚠️ Cidade não encontrada — compromisso salvo sem marcador.');}
+    },200);
+    setTimeout(()=>openPostSaveModal('event',e,participants),600);
   }
 }
 
