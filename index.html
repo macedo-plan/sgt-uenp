@@ -350,37 +350,30 @@ textarea{resize:vertical;min-height:60px;}
       <div class="card"><div class="section-title">Próximas Tarefas</div><div id="painel-tasks"></div></div>
       <div class="card"><div class="section-title">Próximos Compromissos</div><div id="painel-events"></div></div>
     </div>
-    <div class="grid-2" style="gap:20px;margin-top:20px;">
-      <div class="card">
-        <div class="section-title">🗺 Mapa de Deslocamentos</div>
-        <div id="map"></div>
-        <div class="map-legend">
-          <div class="map-legend-item"><div class="legend-dot" style="background:#1A3A2A"></div> Campi UENP</div>
-          <div class="map-legend-item"><div class="legend-dot" style="background:#B45309"></div> Ibaiti / CIVARC</div>
-          <div style="margin-left:auto;font-size:11px;color:var(--muted)">Clique → Google Maps</div>
-        </div>
-      </div>
-      <div class="card">
+    <div style="gap:20px;margin-top:20px;display:grid;grid-template-columns:1fr 1fr;">
+      <div class="card" style="grid-column:1/2;">
         <div class="section-title">🌤 Clima — Bandeirantes, PR</div>
         <div id="weather-widget"><div class="empty-state"><div class="empty-icon">🌤</div><p>Carregando...</p></div></div>
       </div>
-    </div>
-    <div class="grid-2" style="gap:20px;margin-top:20px;">
-      <div class="card">
+      <div class="card" style="grid-column:2/3;">
         <div class="section-title">📁 Documentos Rápidos <button class="btn btn-sm btn-primary" onclick="openDocModal()">+ Adicionar</button></div>
         <div id="doc-list"></div>
       </div>
-      <div class="card">
-        <div class="section-title">📊 Indicadores do Território</div>
-        <div id="indicators-panel"></div>
-      </div>
     </div>
     <div class="card" style="margin-top:20px;">
-      <div class="section-title">🖼 Galeria de Campo
-        <button class="btn btn-sm btn-primary" onclick="document.getElementById('photo-input').click()">+ Foto</button>
-        <input type="file" id="photo-input" accept="image/*" multiple style="display:none">
+      <div class="section-title">🗺 Mapa de Deslocamentos</div>
+      <div id="map" style="height:520px;"></div>
+      <div class="map-legend">
+        <div class="map-legend-item"><div class="legend-dot" style="background:#1A3A2A"></div> Campi UENP</div>
+        <div class="map-legend-item"><div class="legend-dot" style="background:#B45309"></div> Ibaiti / CIVARC</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--muted)">Clique → Google Maps</div>
       </div>
-      <div id="photo-gallery"><div class="empty-state"><div class="empty-icon">📷</div><p>Adicione fotos das visitas de campo</p></div></div>
+    </div>
+    <!-- Indicadores e Galeria ocultos mas mantidos no DOM para não quebrar funções -->
+    <div style="display:none;">
+      <div id="indicators-panel"></div>
+      <div id="photo-gallery"></div>
+      <input type="file" id="photo-input" accept="image/*" multiple>
     </div>
   </div>
 
@@ -1764,9 +1757,46 @@ function generateMonthlyReport(manual=false){
     return d.getMonth()===mes && d.getFullYear()===ano;
   });
 
-  if(!filteredNotes.length){toast('Nenhuma anotação encontrada para o período.');return;}
+  // Filtrar compromissos do mês
+  const filteredEvents = events.filter(e=>{
+    if(!e.date) return false;
+    const d = new Date(e.date+'T00:00:00');
+    return manual ? true : (d.getMonth()===mes && d.getFullYear()===ano);
+  }).sort((a,b)=>a.date.localeCompare(b.date));
 
-  // Agrupar por frente
+  if(!filteredNotes.length && !filteredEvents.length){toast('Nenhum dado encontrado para o período.');return;}
+
+  // Seção de compromissos
+  const eventsSection = filteredEvents.length ? `
+    <div style="margin-bottom:40px;">
+      <h2 style="font-size:17px;color:#1A3A2A;border-bottom:2px solid #1A3A2A;padding-bottom:6px;margin-bottom:16px;">📅 Compromissos do Mês</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#1A3A2A;color:#fff;">
+            <th style="padding:8px 10px;text-align:left;">Data</th>
+            <th style="padding:8px 10px;text-align:left;">Compromisso</th>
+            <th style="padding:8px 10px;text-align:left;">Local</th>
+            <th style="padding:8px 10px;text-align:left;">Responsável</th>
+            <th style="padding:8px 10px;text-align:left;">Frente</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filteredEvents.map((e,i)=>{
+            const f=FRENTES[e.frente]||{label:e.frente,color:'#666'};
+            const bg=i%2===0?'#F9F9F7':'#fff';
+            return `<tr style="background:${bg};">
+              <td style="padding:8px 10px;">${formatDate(e.date)}${e.time?' · '+e.time:''}</td>
+              <td style="padding:8px 10px;font-weight:600;">${e.title}</td>
+              <td style="padding:8px 10px;">${e.location||'—'}</td>
+              <td style="padding:8px 10px;">${e.responsible||'—'}</td>
+              <td style="padding:8px 10px;"><span style="background:${f.color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">${f.label}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : '';
+
+  // Agrupar notas por frente
   const byFrente = {};
   filteredNotes.forEach(n=>{
     const k = n.frente||'geral';
@@ -1787,20 +1817,26 @@ function generateMonthlyReport(manual=false){
     </div>`;
   }).join('');
 
+  const notesSection = filteredNotes.length ? `
+    <h2 style="font-size:17px;color:#1A3A2A;border-bottom:2px solid #1A3A2A;padding-bottom:6px;margin-bottom:24px;">📋 Anotações do Mês</h2>
+    ${frenteSections}` : '';
+
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
-  <title>Relatório de Anotações — ${mesLabel} ${ano}</title>
-  <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#222;}
+  <title>Relatório Mensal — ${mesLabel} ${ano}</title>
+  <style>body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#222;}
   h1{font-size:22px;color:#1A3A2A;border-bottom:3px solid #1A3A2A;padding-bottom:10px;}
+  h2{font-size:17px;}
   .meta{font-size:13px;color:#666;margin-bottom:32px;}
   @media print{body{margin:20px;}}</style>
   </head><body>
-  <h1>📋 Relatório de Anotações — ${mesLabel} ${ano}</h1>
+  <h1>📋 Relatório Mensal — ${mesLabel} ${ano}</h1>
   <div class="meta">
     Gerado em: ${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}<br>
     Responsável: ${currentUser?.name||'—'} · UENP/NEAT<br>
-    Total de anotações: ${filteredNotes.length}
+    Compromissos: ${filteredEvents.length} · Anotações: ${filteredNotes.length}
   </div>
-  ${frenteSections}
+  ${eventsSection}
+  ${notesSection}
   </body></html>`;
 
   // Download do arquivo
