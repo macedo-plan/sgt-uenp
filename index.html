@@ -1846,7 +1846,7 @@ function generateReportManual(){generateMonthlyReport(true);}
 // Para mostrar apenas futuros + últimos 30 dias, ajustamos o filtro:
 function getMapDateLimit(){
   const d=new Date(today);
-  d.setDate(d.getDate()-30);
+  d.setDate(d.getDate()-180);
   return d.toISOString().split('T')[0];
 }
 
