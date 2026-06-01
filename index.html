@@ -710,7 +710,7 @@ const STATUS_CONFIG = {
 const USER_PERMISSIONS = {
   'macedo@uenp.edu.br':               {name:'Rogério',  role:'admin',  frentes:['restec','pmo','crt','aulas','bio'], whatsapp:'5543991572427'},
   'macedosid@gmail.com':              {name:'Rogério',  role:'admin',  frentes:['restec','pmo','crt','aulas','bio'], whatsapp:'5543991572427'},
-  'nataly.wesgueber@uenp.edu.br':     {name:'Nataly',   role:'member', frentes:['crt','pmo'], whatsapp:''},
+  'nataly.wesgueber@uenp.edu.br':     {name:'Nataly',   role:'member', frentes:['restec','pmo','crt','aulas','bio'], whatsapp:''},
   'victoria.bressani@gmail.com':      {name:'Victória', role:'member', frentes:['pmo'], whatsapp:'5543999342271'},
   'victormatheusmartins10@gmail.com': {name:'Victor',   role:'member', frentes:['pmo'], whatsapp:'5543996352594'},
   'rcsiqueira.agro@gmail.com':        {name:'Renato',   role:'member', frentes:['pmo'], whatsapp:''},
@@ -718,7 +718,8 @@ const USER_PERMISSIONS = {
   'lucasmonteirot01@gmail.com':       {name:'Lucas',    role:'member', frentes:['pmo'], whatsapp:''},
   'calinibonacin@gmail.com':          {name:'Calini',   role:'member', frentes:['restec'], whatsapp:''},
   'amandarestecidr@gmail.com':        {name:'Amanda',   role:'member', frentes:['restec'], whatsapp:''},
-  'diego.contiero@uenp.edu.br':       {name:'Diego',    role:'member', frentes:['bio','pmo'], whatsapp:''},
+  'diego.contiero@uenp.edu.br':       {name:'Diego',    role:'member', frentes:['restec','pmo','crt','aulas','bio'], whatsapp:''},
+  'helotivedove@gmail.com':           {name:'Heloisa',  role:'member', frentes:['restec','pmo','crt','aulas','bio'], whatsapp:''},
 };
 
 let currentUser = null; // {email, name, role, frentes}
@@ -1494,6 +1495,8 @@ async function saveEvent(){
       lat:geo?.lat||null,lng:geo?.lng||null,
       notes:document.getElementById('ev-notes').value.trim()};
     if(db){const{id,...data}=e;fsSet('events',id,data);}else{events.push(e);save();renderPage(currentPage);}
+    // Adicionar ao array local imediatamente para o mapa não esperar o Firebase
+    if(db && !events.find(ev=>ev.id===e.id)) events.push(e);
     closeModal('event-modal');
     addNotification('event',title,e.frente,responsibleName);
     addEventMarkersToMap();
